@@ -1,3 +1,5 @@
+const BASE_URL = "http://localhost:5000/api";
+
 let allEvents = [];
 let editingEventId = null;
 
@@ -16,9 +18,31 @@ async function init() {
 async function loadEvents() {
   try {
     allEvents = await getEvents();
+
     applyFilters();
     updateStats();
     renderPriority();
+
+    // 🔔 Reminder Logic
+    allEvents.forEach(e => {
+
+      if (!e.reminder) return;
+      if (e.status === "Attended") return;
+
+      const days = daysLeft(e.registration_deadline);
+
+      if (days <= 1 && days >= 0) {
+
+        const reminderKey = `reminded_${e.id}`;
+
+        if (!sessionStorage.getItem(reminderKey)) {
+          alert(`🔔 Reminder: "${e.name}" deadline is near!`);
+          sessionStorage.setItem(reminderKey, "true");
+        }
+      }
+
+    });
+
   } catch (err) {
     console.error("Load error:", err);
   }
@@ -93,7 +117,8 @@ function updateStats() {
   document.getElementById("totalCount").textContent = allEvents.length;
 
   const urgent = allEvents.filter(e =>
-    daysLeft(e.registration_deadline) <= 7
+    daysLeft(e.registration_deadline) <= 7 &&
+    e.status !== "Attended"
   );
   document.getElementById("urgentCount").textContent = urgent.length;
 
@@ -114,7 +139,6 @@ function renderPriority() {
   const container = document.getElementById("priorityList");
   container.innerHTML = "";
 
-  // ❗ Exclude Attended events
   const activeEvents = allEvents.filter(e =>
     e.status !== "Attended"
   );
@@ -153,12 +177,13 @@ function setupForm() {
       registration_deadline: document.getElementById("registration_deadline").value,
       link: document.getElementById("link").value,
       notes: document.getElementById("notes").value,
-      status: document.getElementById("status").value
+      status: document.getElementById("status").value,
+      reminder: document.getElementById("reminder")?.checked || false
     };
 
     try {
       if (editingEventId) {
-        await fetch(`http://localhost:5000/api/events/${editingEventId}`, {
+        await fetch(`${BASE_URL}/events/${editingEventId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(eventData)
@@ -189,25 +214,14 @@ function openDetail(id) {
 
   content.innerHTML = `
     <h3>${eventObj.name}</h3>
-
-    <p><strong>Category:</strong> ${eventObj.category}</p>
-    <p><strong>Source:</strong> ${eventObj.source}</p>
-    <p><strong>Event Date:</strong> ${eventObj.event_date}</p>
-    <p><strong>Deadline:</strong> ${eventObj.registration_deadline}</p>
     <p><strong>Status:</strong> ${eventObj.status}</p>
 
     <div style="margin:20px 0; display:flex; gap:10px;">
       <button onclick="window.open('${eventObj.link}', '_blank')">
         Open Registration
       </button>
-
-      <button onclick="editEvent('${eventObj.id}')">
-        Edit
-      </button>
-
-      <button onclick="deleteEventConfirmed('${eventObj.id}')">
-        Delete
-      </button>
+      <button onclick="editEvent('${eventObj.id}')">Edit</button>
+      <button onclick="deleteEventConfirmed('${eventObj.id}')">Delete</button>
     </div>
 
     <hr style="margin:20px 0;">
@@ -220,7 +234,6 @@ function openDetail(id) {
           <button onclick="window.open('${eventObj.certificate_url}', '_blank')">
             Open Certificate
           </button>
-
           <button onclick="removeCertificate('${eventObj.id}')">
             Remove Certificate
           </button>
@@ -252,6 +265,7 @@ function editEvent(id) {
   document.getElementById("link").value = eventObj.link;
   document.getElementById("notes").value = eventObj.notes;
   document.getElementById("status").value = eventObj.status;
+  document.getElementById("reminder").checked = eventObj.reminder || false;
 
   editingEventId = id;
 
@@ -269,68 +283,27 @@ async function deleteEventConfirmed(id) {
   await loadEvents();
 }
 
-/* ================= FILE UPLOAD ================= */
-
-async function uploadBrochure(event, eventId) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  console.log("Uploading brochure for:", eventId);
-
-  const uploadRes = await uploadFile(file, "brochure");
-
-  console.log("Upload response:", uploadRes);
-
-  if (!uploadRes || !uploadRes.url) {
-    alert("Upload failed");
-    return;
-  }
-
-  await fetch(`http://localhost:5000/api/events/${eventId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ brochure_url: uploadRes.url })
-  });
-
-  await loadEvents();
-}
+/* ================= CERTIFICATE ================= */
 
 async function uploadCertificate(event, eventId) {
   const file = event.target.files[0];
   if (!file) return;
 
-  try {
-    console.log("Uploading certificate...");
+  const uploadRes = await uploadFile(file, "certificate");
 
-    const uploadRes = await uploadFile(file, "certificate");
-
-    console.log("Upload response:", uploadRes);
-
-    if (!uploadRes || !uploadRes.url) {
-      alert("Upload failed. No URL returned.");
-      return;
-    }
-
-    const updateRes = await fetch(
-      `${BASE_URL}/events/${eventId}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          certificate_url: uploadRes.url
-        })
-      }
-    );
-
-    const updateData = await updateRes.json();
-    console.log("Update response:", updateData);
-
-    await loadEvents();
-    openDetail(eventId);
-
-  } catch (err) {
-    console.error("Certificate upload error:", err);
+  if (!uploadRes || !uploadRes.url) {
+    alert("Upload failed.");
+    return;
   }
+
+  await fetch(`${BASE_URL}/events/${eventId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ certificate_url: uploadRes.url })
+  });
+
+  await loadEvents();
+  openDetail(eventId);
 }
 
 async function removeCertificate(eventId) {
@@ -345,8 +318,3 @@ async function removeCertificate(eventId) {
   await loadEvents();
   openDetail(eventId);
 }
-
-const activeEvents = allEvents.filter(e =>
-  e.status !== "Attended" &&
-  daysLeft(e.registration_deadline) >= 0
-);
