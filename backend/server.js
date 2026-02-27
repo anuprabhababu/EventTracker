@@ -6,11 +6,33 @@ const eventsRoutes = require('./routes/events');
 
 const app = express();
 
-app.use(cors());
+/* ================= CORS ================= */
+
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+app.options('*', cors()); // handle preflight
+
+/* ================= BODY PARSER ================= */
+
 app.use(express.json());
+
+/* ================= ROUTES ================= */
 
 app.use('/api/events', eventsRoutes);
 
-app.listen(process.env.PORT, () => {
-  console.log(`Server running on port ${process.env.PORT}`);
+/* ================= TEST ROUTE ================= */
+
+app.get("/", (req, res) => {
+  res.send("BACKEND RUNNING ✅");
+});
+
+/* ================= SERVER ================= */
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
