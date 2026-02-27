@@ -42,7 +42,7 @@ function applyFilters() {
 
   if (currentCategory !== "all" && currentCategory !== "priority") {
     filtered = filtered.filter(e =>
-      e.category.toLowerCase() === currentCategory
+      e.category && e.category.toLowerCase() === currentCategory
     );
   }
 
@@ -81,9 +81,7 @@ function renderEvents(events) {
       <div class="event-card ${urgency}" onclick="openDetail('${e.id}')">
         <div class="event-name">${e.name}</div>
         <div class="event-source">via ${e.source}</div>
-        <div class="countdown">
-          ${days} days left
-        </div>
+        <div class="countdown">${days} days left</div>
       </div>
     `;
   });
@@ -123,6 +121,7 @@ function renderPriority() {
 
   sorted.slice(0, 5).forEach((e, index) => {
     const days = daysLeft(e.registration_deadline);
+
     container.innerHTML += `
       <div class="priority-item">
         <div>#${index + 1}</div>
@@ -142,14 +141,14 @@ function setupForm() {
     e.preventDefault();
 
     const eventData = {
-      name: name.value,
-      category: category.value,
-      source: source.value,
-      event_date: event_date.value,
-      registration_deadline: registration_deadline.value,
-      link: link.value,
-      notes: notes.value,
-      status: status.value
+      name: document.getElementById("name").value,
+      category: document.getElementById("category").value,
+      source: document.getElementById("source").value,
+      event_date: document.getElementById("event_date").value,
+      registration_deadline: document.getElementById("registration_deadline").value,
+      link: document.getElementById("link").value,
+      notes: document.getElementById("notes").value,
+      status: document.getElementById("status").value
     };
 
     try {
@@ -191,31 +190,6 @@ function openDetail(id) {
     <p><strong>Deadline:</strong> ${eventObj.registration_deadline}</p>
     <p><strong>Status:</strong> ${eventObj.status}</p>
 
-    <div style="margin-top:15px;">
-      <button onclick="window.open('${eventObj.link}')">Open</button>
-      <button onclick="editEvent('${eventObj.id}')">Edit</button>
-      <button onclick="deleteEventConfirmed('${eventObj.id}')">Delete</button>
-    </div>
-  `;
-
-  modal.classList.add("open");
-}
-
-function openDetail(id) {
-  const eventObj = allEvents.find(e => e.id === id);
-  if (!eventObj) return;
-
-  const modal = document.getElementById("detailModal");
-  const content = document.getElementById("detailContent");
-
-  content.innerHTML = `
-    <h3>${eventObj.name}</h3>
-    <p><strong>Category:</strong> ${eventObj.category}</p>
-    <p><strong>Source:</strong> ${eventObj.source}</p>
-    <p><strong>Event Date:</strong> ${eventObj.event_date}</p>
-    <p><strong>Deadline:</strong> ${eventObj.registration_deadline}</p>
-    <p><strong>Status:</strong> ${eventObj.status}</p>
-
     <div style="margin-top:15px; display:flex; gap:10px;">
       <button onclick="window.open('${eventObj.link}')">Open</button>
       <button onclick="editEvent('${eventObj.id}')">Edit</button>
@@ -224,20 +198,22 @@ function openDetail(id) {
 
     <hr style="margin:20px 0;">
 
-    <h4>Upload Brochure (PDF)</h4>
+    <h4>📄 Upload Brochure</h4>
     <input type="file" onchange="uploadBrochure(event, '${eventObj.id}')">
 
-    ${eventObj.brochure_url ? 
-      `<p><a href="${eventObj.brochure_url}" target="_blank">View Brochure</a></p>` 
-      : ""
+    ${
+      eventObj.brochure_url
+        ? `<p><a href="${eventObj.brochure_url}" target="_blank">View Brochure</a></p>`
+        : ""
     }
 
-    <h4 style="margin-top:20px;">Upload Certificate</h4>
+    <h4 style="margin-top:20px;">🎓 Upload Certificate</h4>
     <input type="file" onchange="uploadCertificate(event, '${eventObj.id}')">
 
-    ${eventObj.certificate_url ? 
-      `<p><a href="${eventObj.certificate_url}" target="_blank">View Certificate</a></p>` 
-      : ""
+    ${
+      eventObj.certificate_url
+        ? `<p><a href="${eventObj.certificate_url}" target="_blank">View Certificate</a></p>`
+        : ""
     }
   `;
 
@@ -254,14 +230,14 @@ function editEvent(id) {
   const eventObj = allEvents.find(e => e.id === id);
   if (!eventObj) return;
 
-  name.value = eventObj.name;
-  category.value = eventObj.category;
-  source.value = eventObj.source;
-  event_date.value = eventObj.event_date;
-  registration_deadline.value = eventObj.registration_deadline;
-  link.value = eventObj.link;
-  notes.value = eventObj.notes;
-  status.value = eventObj.status;
+  document.getElementById("name").value = eventObj.name;
+  document.getElementById("category").value = eventObj.category;
+  document.getElementById("source").value = eventObj.source;
+  document.getElementById("event_date").value = eventObj.event_date;
+  document.getElementById("registration_deadline").value = eventObj.registration_deadline;
+  document.getElementById("link").value = eventObj.link;
+  document.getElementById("notes").value = eventObj.notes;
+  document.getElementById("status").value = eventObj.status;
 
   editingEventId = id;
 
@@ -276,5 +252,37 @@ async function deleteEventConfirmed(id) {
 
   await deleteEvent(id);
   closeDetail();
+  await loadEvents();
+}
+
+/* ================= FILE UPLOAD ================= */
+
+async function uploadBrochure(event, eventId) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const uploadRes = await uploadFile(file, "brochure");
+
+  await fetch(`http://localhost:5000/api/events/${eventId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brochure_url: uploadRes.url })
+  });
+
+  await loadEvents();
+}
+
+async function uploadCertificate(event, eventId) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const uploadRes = await uploadFile(file, "certificate");
+
+  await fetch(`http://localhost:5000/api/events/${eventId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ certificate_url: uploadRes.url })
+  });
+
   await loadEvents();
 }
