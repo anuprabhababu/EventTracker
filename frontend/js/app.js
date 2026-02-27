@@ -189,14 +189,25 @@ function openDetail(id) {
 
   content.innerHTML = `
     <h3>${eventObj.name}</h3>
-    <p><strong>Status:</strong> ${eventObj.status}</p>
+
+    <p><strong>Category:</strong> ${eventObj.category}</p>
+    <p><strong>Source:</strong> ${eventObj.source}</p>
     <p><strong>Event Date:</strong> ${eventObj.event_date}</p>
     <p><strong>Deadline:</strong> ${eventObj.registration_deadline}</p>
+    <p><strong>Status:</strong> ${eventObj.status}</p>
 
-    <div style="margin:15px 0; display:flex; gap:10px;">
-      <button onclick="window.open('${eventObj.link}')">Open Registration</button>
-      <button onclick="editEvent('${eventObj.id}')">Edit</button>
-      <button onclick="deleteEventConfirmed('${eventObj.id}')">Delete</button>
+    <div style="margin:20px 0; display:flex; gap:10px;">
+      <button onclick="window.open('${eventObj.link}', '_blank')">
+        Open Registration
+      </button>
+
+      <button onclick="editEvent('${eventObj.id}')">
+        Edit
+      </button>
+
+      <button onclick="deleteEventConfirmed('${eventObj.id}')">
+        Delete
+      </button>
     </div>
 
     <hr style="margin:20px 0;">
@@ -206,14 +217,13 @@ function openDetail(id) {
     ${
       eventObj.certificate_url
         ? `
-          <div style="margin-bottom:10px;">
-            <button onclick="window.open('${eventObj.certificate_url}')">
-              Open Certificate
-            </button>
-            <button onclick="removeCertificate('${eventObj.id}')">
-              Remove Certificate
-            </button>
-          </div>
+          <button onclick="window.open('${eventObj.certificate_url}', '_blank')">
+            Open Certificate
+          </button>
+
+          <button onclick="removeCertificate('${eventObj.id}')">
+            Remove Certificate
+          </button>
         `
         : `
           <input type="file" onchange="uploadCertificate(event, '${eventObj.id}')">
@@ -290,21 +300,33 @@ async function uploadCertificate(event, eventId) {
   if (!file) return;
 
   try {
+    console.log("Uploading certificate...");
+
     const uploadRes = await uploadFile(file, "certificate");
 
+    console.log("Upload response:", uploadRes);
+
     if (!uploadRes || !uploadRes.url) {
-      alert("Upload failed");
+      alert("Upload failed. No URL returned.");
       return;
     }
 
-    await fetch(`http://localhost:5000/api/events/${eventId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ certificate_url: uploadRes.url })
-    });
+    const updateRes = await fetch(
+      `${BASE_URL}/events/${eventId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          certificate_url: uploadRes.url
+        })
+      }
+    );
+
+    const updateData = await updateRes.json();
+    console.log("Update response:", updateData);
 
     await loadEvents();
-    openDetail(eventId); // refresh modal
+    openDetail(eventId);
 
   } catch (err) {
     console.error("Certificate upload error:", err);
@@ -314,19 +336,14 @@ async function uploadCertificate(event, eventId) {
 async function removeCertificate(eventId) {
   if (!confirm("Remove certificate?")) return;
 
-  try {
-    await fetch(`http://localhost:5000/api/events/${eventId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ certificate_url: null })
-    });
+  await fetch(`${BASE_URL}/events/${eventId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ certificate_url: null })
+  });
 
-    await loadEvents();
-    openDetail(eventId);
-
-  } catch (err) {
-    console.error("Remove certificate error:", err);
-  }
+  await loadEvents();
+  openDetail(eventId);
 }
 
 const activeEvents = allEvents.filter(e =>
