@@ -114,7 +114,12 @@ function renderPriority() {
   const container = document.getElementById("priorityList");
   container.innerHTML = "";
 
-  const sorted = [...allEvents].sort((a, b) =>
+  // ❗ Exclude Attended events
+  const activeEvents = allEvents.filter(e =>
+    e.status !== "Attended"
+  );
+
+  const sorted = activeEvents.sort((a, b) =>
     daysLeft(a.registration_deadline) -
     daysLeft(b.registration_deadline)
   );
@@ -184,36 +189,35 @@ function openDetail(id) {
 
   content.innerHTML = `
     <h3>${eventObj.name}</h3>
-    <p><strong>Category:</strong> ${eventObj.category}</p>
-    <p><strong>Source:</strong> ${eventObj.source}</p>
+    <p><strong>Status:</strong> ${eventObj.status}</p>
     <p><strong>Event Date:</strong> ${eventObj.event_date}</p>
     <p><strong>Deadline:</strong> ${eventObj.registration_deadline}</p>
-    <p><strong>Status:</strong> ${eventObj.status}</p>
 
-    <div style="margin-top:15px; display:flex; gap:10px;">
-      <button onclick="window.open('${eventObj.link}')">Open</button>
+    <div style="margin:15px 0; display:flex; gap:10px;">
+      <button onclick="window.open('${eventObj.link}')">Open Registration</button>
       <button onclick="editEvent('${eventObj.id}')">Edit</button>
       <button onclick="deleteEventConfirmed('${eventObj.id}')">Delete</button>
     </div>
 
     <hr style="margin:20px 0;">
 
-    <h4>📄 Upload Brochure</h4>
-    <input type="file" onchange="uploadBrochure(event, '${eventObj.id}')">
-
-    ${
-      eventObj.brochure_url
-        ? `<p><a href="${eventObj.brochure_url}" target="_blank">View Brochure</a></p>`
-        : ""
-    }
-
-    <h4 style="margin-top:20px;">🎓 Upload Certificate</h4>
-    <input type="file" onchange="uploadCertificate(event, '${eventObj.id}')">
+    <h4>🎓 Certificate</h4>
 
     ${
       eventObj.certificate_url
-        ? `<p><a href="${eventObj.certificate_url}" target="_blank">View Certificate</a></p>`
-        : ""
+        ? `
+          <div style="margin-bottom:10px;">
+            <button onclick="window.open('${eventObj.certificate_url}')">
+              Open Certificate
+            </button>
+            <button onclick="removeCertificate('${eventObj.id}')">
+              Remove Certificate
+            </button>
+          </div>
+        `
+        : `
+          <input type="file" onchange="uploadCertificate(event, '${eventObj.id}')">
+        `
     }
   `;
 
@@ -261,7 +265,16 @@ async function uploadBrochure(event, eventId) {
   const file = event.target.files[0];
   if (!file) return;
 
+  console.log("Uploading brochure for:", eventId);
+
   const uploadRes = await uploadFile(file, "brochure");
+
+  console.log("Upload response:", uploadRes);
+
+  if (!uploadRes || !uploadRes.url) {
+    alert("Upload failed");
+    return;
+  }
 
   await fetch(`http://localhost:5000/api/events/${eventId}`, {
     method: "PUT",
@@ -276,13 +289,47 @@ async function uploadCertificate(event, eventId) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const uploadRes = await uploadFile(file, "certificate");
+  try {
+    const uploadRes = await uploadFile(file, "certificate");
 
-  await fetch(`http://localhost:5000/api/events/${eventId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ certificate_url: uploadRes.url })
-  });
+    if (!uploadRes || !uploadRes.url) {
+      alert("Upload failed");
+      return;
+    }
 
-  await loadEvents();
+    await fetch(`http://localhost:5000/api/events/${eventId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ certificate_url: uploadRes.url })
+    });
+
+    await loadEvents();
+    openDetail(eventId); // refresh modal
+
+  } catch (err) {
+    console.error("Certificate upload error:", err);
+  }
 }
+
+async function removeCertificate(eventId) {
+  if (!confirm("Remove certificate?")) return;
+
+  try {
+    await fetch(`http://localhost:5000/api/events/${eventId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ certificate_url: null })
+    });
+
+    await loadEvents();
+    openDetail(eventId);
+
+  } catch (err) {
+    console.error("Remove certificate error:", err);
+  }
+}
+
+const activeEvents = allEvents.filter(e =>
+  e.status !== "Attended" &&
+  daysLeft(e.registration_deadline) >= 0
+);
