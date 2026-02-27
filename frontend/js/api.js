@@ -1,4 +1,4 @@
-const API = "https://expp-zefs.onrender.com";
+const API = "https://eventtracker-1-gzyu.onrender.com";
 
 async function getEvents() {
   const res = await fetch(`${API}/events`);
